@@ -1,0 +1,7 @@
+langchain-google-genai~=2.0.6
+langchain-core~=0.3.21
+langchain
+google-generativeai
+fastapi~=0.112.2
+uvicorn~=0.20.0
+python-multipart
