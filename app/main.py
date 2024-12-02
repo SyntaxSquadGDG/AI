@@ -73,7 +73,6 @@ async def classify_image_endpoint(file: UploadFile = File(...)):
 
         # Classify the image
         category = classify_image_bytes(image_bytes)
-
         return JSONResponse(content={"category": category})
 
     except ValueError as ve:
