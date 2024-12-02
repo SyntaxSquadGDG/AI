@@ -4,8 +4,11 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
-import os
+import re
 import uvicorn
+import json
+from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI(
     title="Image Classification API",
@@ -13,6 +16,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://ccdtr14p-3000.uks1.devtunnels.ms",
+    "https://syntaxsquad-ai.azurewebsites.net"
+]
+
+# config Cors
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 def classify_image_bytes(image_bytes: bytes) -> str:
     """
     Classify an image to one of the specified categories.
@@ -32,8 +50,21 @@ def classify_image_bytes(image_bytes: bytes) -> str:
     model_name = "gemini-1.5-flash"
     llm = ChatGoogleGenerativeAI(api_key=api, model=model_name, temperature=0.8)
     prompt = """
-        Classify this document into one of the following categories:
-        ['Advertisement', 'Email', 'Form', 'Letter', 'Memo', 'News', 'Note', 'Report', 'Resume', 'Scientific']
+        classify this document to one of these categories:
+['Advertisement',
+ 'Email',
+ 'Form',
+ 'Letter',
+ 'Memo',
+ 'News',
+ 'Note',
+ 'Report',
+ 'Resume',
+ 'Scientific']
+ 
+ And give me the accuracy of your decision from 0 "not sure" to 100 "Sure".
+ Output Format:
+ Email 87
     """
     # Pass the image and the prompt to the model
     message = HumanMessage(
@@ -44,13 +75,20 @@ def classify_image_bytes(image_bytes: bytes) -> str:
     )
 
     response = llm.invoke([message])
-    folder = str(response.content)
+    response_content = str(response.content)
+    match = re.match(r"(\w+)\s+(\d+)", response_content)
+    folder = match.group(1)
+    accuracy = int(match.group(2))
     section = "/SyntaxSquad/"
-    return section + folder
+    result = {
+        "path": section + folder,
+        "accuracy": accuracy
+    }
+    return section + folder, accuracy
 
 @app.get("/")
 def hello_world():
-    return {"message":"Hello World!"}
+    return {"message":"Hello World! CORS 3"}
 @app.post("/classify-image/")
 async def classify_image_endpoint(file: UploadFile = File(...)):
     """
@@ -72,8 +110,9 @@ async def classify_image_endpoint(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Image size exceeds 5MB limit.")
 
         # Classify the image
-        category = classify_image_bytes(image_bytes)
-        return JSONResponse(content={"category": category})
+        path, accuracy = classify_image_bytes(image_bytes)
+
+        return JSONResponse(content={"path": path, "accuracy": accuracy})
 
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=str(ve))
